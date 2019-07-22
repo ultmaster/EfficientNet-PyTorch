@@ -117,7 +117,8 @@ def main_worker(gpu, args):
         if args.request_from_nni:
             block_args, global_params = utils.efficientnet(width_coefficient=args.width_coefficient,
                                                            depth_coefficient=args.depth_coefficient,
-                                                           image_size=args.resolution)
+                                                           image_size=args.resolution,
+                                                           num_classes=args.num_classes)
             model = EfficientNet(block_args, global_params)
             print("=> Creating EfficientNet with configurations from NNI")
         elif args.pretrained:
