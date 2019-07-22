@@ -1,0 +1,18 @@
+authorName: v-yugzh
+experimentName: example_efficient_net
+trialConcurrency: 1
+maxExecDuration: 1h
+maxTrialNum: 20
+trainingServicePlatform: local
+searchSpacePath: search.json
+useAnnotation: false
+tuner:
+  codeDir: .
+  classFileName: tuner.py
+  className: FixedProductTuner
+  classArgs:
+    product: 2
+trial:
+  codeDir: .
+  command: python main.py cifar10 --epochs 5 -a efficientnet-b0 --num-classes 10 --batch-size 32 --lr 0.032 --wd 1e-5 --request-from-nni
+  gpuNum: 0

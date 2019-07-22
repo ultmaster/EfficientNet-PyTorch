@@ -20,7 +20,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
-from efficientnet_pytorch import EfficientNet
+from efficientnet_pytorch import EfficientNet, utils
 from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
@@ -58,15 +58,34 @@ parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
-parser.add_argument('--image_size', default=224, type=int,
+parser.add_argument('--image-size', default=224, type=int,
                     help='image size')
 parser.add_argument('--num-classes', default=1000, type=int)
+parser.add_argument('--request-from-nni', default=False, action='store_true')
+parser.add_argument('--model-dir', default='/tmp', type=str)
+parser.add_argument('--depth-coefficient', default=None, type=float)
+parser.add_argument('--width-coefficient', default=None, type=float)
+parser.add_argument('--resolution', default=None, type=int)
 
 best_acc1 = 0
 
 
 def main():
     args = parser.parse_args()
+
+    if args.request_from_nni:
+        import nni
+        tuner_params = nni.get_next_parameter()
+        print(tuner_params)
+
+        if "alpha" in tuner_params:
+            args.depth_coefficient = tuner_params["alpha"]
+            args.width_coefficient = tuner_params["beta"]
+            args.resolution = int(tuner_params["gamma"] * 224)
+        if "lr" in tuner_params:
+            args.learning_rate = tuner_params["lr"]
+
+        args.model_dir = os.environ["NNI_OUTPUT_DIR"]
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -82,12 +101,11 @@ def main():
         warnings.warn('You have chosen a specific GPU. This will completely '
                       'disable data parallelism.')
 
-    ngpus_per_node = torch.cuda.device_count()
     # Simply call main_worker function
-    main_worker(args.gpu, ngpus_per_node, args)
+    main_worker(args.gpu, args)
 
 
-def main_worker(gpu, ngpus_per_node, args):
+def main_worker(gpu, args):
     global best_acc1
     args.gpu = gpu
 
@@ -96,13 +114,18 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # create model
     if 'efficientnet' in args.arch:  # NEW
-        if args.pretrained:
+        if args.request_from_nni:
+            block_args, global_params = utils.efficientnet(width_coefficient=args.width_coefficient,
+                                                           depth_coefficient=args.depth_coefficient,
+                                                           image_size=args.resolution)
+            model = EfficientNet(block_args, global_params)
+            print("=> Creating EfficientNet with configurations from NNI")
+        elif args.pretrained:
             model = EfficientNet.from_pretrained(args.arch, num_classes=args.num_classes)
             print("=> using pre-trained model '{}'".format(args.arch))
         else:
             print("=> creating model '{}'".format(args.arch))
             model = EfficientNet.from_name(args.arch)
-
     else:
         if args.pretrained:
             print("=> using pre-trained model '{}'".format(args.arch))
@@ -125,9 +148,9 @@ def main_worker(gpu, ngpus_per_node, args):
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
 
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+    optimizer = torch.optim.RMSProp(model.parameters(), args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -151,15 +174,15 @@ def main_worker(gpu, ngpus_per_node, args):
     # Create transforms
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
-    train_transforms = transforms.Compose([
-            transforms.RandomResizedCrop(224),
+
+    if 'efficientnet' in args.arch:
+        image_size = EfficientNet.get_image_size(args.arch)
+        train_transforms = transforms.Compose([
+            transforms.RandomResizedCrop(image_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
         ])
-
-    if 'efficientnet' in args.arch:
-        image_size = EfficientNet.get_image_size(args.arch)
         val_transforms = transforms.Compose([
             transforms.Resize(image_size, interpolation=PIL.Image.BICUBIC),
             transforms.CenterCrop(image_size),
@@ -168,6 +191,12 @@ def main_worker(gpu, ngpus_per_node, args):
         ])
         print('Using image size', image_size)
     else:
+        train_transforms = transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize,
+        ])
         val_transforms = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -215,6 +244,10 @@ def main_worker(gpu, ngpus_per_node, args):
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
 
+        if args.request_from_nni:
+            import nni
+            nni.report_intermediate_result(acc1)
+
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
@@ -224,8 +257,16 @@ def main_worker(gpu, ngpus_per_node, args):
             'arch': args.arch,
             'state_dict': model.state_dict(),
             'best_acc1': best_acc1,
-            'optimizer' : optimizer.state_dict(),
-        }, is_best)
+            'optimizer': optimizer.state_dict(),
+        }, is_best, filename=os.path.join(args.model_dir, "checkpoint.pth.tar"))
+
+    try:
+        if args.request_from_nni:
+            import nni
+            nni.report_final_result(acc1)
+    except NameError:
+        print("No accuracy reported")
+        pass
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
