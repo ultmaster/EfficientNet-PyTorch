@@ -148,7 +148,7 @@ def main_worker(gpu, args):
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
 
-    optimizer = torch.optim.RMSProp(model.parameters(), args.lr,
+    optimizer = torch.optim.RMSprop(model.parameters(), args.lr,
                                     momentum=args.momentum,
                                     weight_decay=args.weight_decay)
 
