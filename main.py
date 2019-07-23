@@ -85,6 +85,9 @@ def main():
         if "lr" in tuner_params:
             args.learning_rate = tuner_params["lr"]
 
+        # demonstrate that intermediate result is actually sent
+        nni.report_intermediate_result(0.)
+
         args.model_dir = os.environ["NNI_OUTPUT_DIR"]
 
     if args.seed is not None:
