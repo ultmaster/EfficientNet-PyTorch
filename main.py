@@ -58,14 +58,12 @@ parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
-parser.add_argument('--image-size', default=224, type=int,
-                    help='image size')
 parser.add_argument('--num-classes', default=1000, type=int)
 parser.add_argument('--request-from-nni', default=False, action='store_true')
 parser.add_argument('--model-dir', default='/tmp', type=str)
 parser.add_argument('--depth-coefficient', default=None, type=float)
 parser.add_argument('--width-coefficient', default=None, type=float)
-parser.add_argument('--resolution', default=None, type=int)
+parser.add_argument('--resolution', default=224, type=int)
 
 best_acc1 = 0
 
@@ -117,16 +115,16 @@ def main_worker(gpu, args):
 
     # create model
     if 'efficientnet' in args.arch:  # NEW
-        if args.request_from_nni:
+        if args.pretrained:
+            model = EfficientNet.from_pretrained(args.arch, num_classes=args.num_classes)
+            print("=> using pre-trained model '{}'".format(args.arch))
+        elif args.request_from_nni:
             block_args, global_params = utils.efficientnet(width_coefficient=args.width_coefficient,
                                                            depth_coefficient=args.depth_coefficient,
                                                            image_size=args.resolution,
                                                            num_classes=args.num_classes)
             model = EfficientNet(block_args, global_params)
             print("=> Creating EfficientNet with configurations from NNI")
-        elif args.pretrained:
-            model = EfficientNet.from_pretrained(args.arch, num_classes=args.num_classes)
-            print("=> using pre-trained model '{}'".format(args.arch))
         else:
             print("=> creating model '{}'".format(args.arch))
             model = EfficientNet.from_name(args.arch)
@@ -180,7 +178,7 @@ def main_worker(gpu, args):
                                      std=[0.229, 0.224, 0.225])
 
     if 'efficientnet' in args.arch:
-        if args.request_from_nni:
+        if args.request_from_nni and not args.pretrained:
             image_size = args.resolution
         else:
             image_size = EfficientNet.get_image_size(args.arch)
