@@ -295,5 +295,5 @@ def load_pretrained_weights(model, model_name, load_fc=True):
         res = model.load_state_dict(state_dict, strict=False)
         # to be compatible with 0.4
         if res is not None:
-            assert str(res.missing_keys) == str(['_fc.weight', '_fc.bias']), 'issue loading pretrained weights'
+            assert str(res.missing_keys) == str(['_fc.weight', '_fc.bias']), 'issue loading pretrained weights: ' + str(res.missing_keys)
     print('Loaded pretrained weights for {}'.format(model_name))
