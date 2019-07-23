@@ -81,7 +81,9 @@ def main():
             args.width_coefficient = tuner_params["beta"]
             args.resolution = int(tuner_params["gamma"] * 224)
         if "lr" in tuner_params:
-            args.learning_rate = tuner_params["lr"]
+            args.lr = tuner_params["lr"]
+
+        print(args)
 
         # demonstrate that intermediate result is actually sent
         nni.report_intermediate_result(0.)
