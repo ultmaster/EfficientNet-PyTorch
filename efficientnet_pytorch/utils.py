@@ -297,4 +297,6 @@ def load_pretrained_weights(model, model_name, load_fc=True):
         if res is not None:
             assert set(res.missing_keys) == {'_fc.bias', '_fc.weight'}, \
                 'issue loading pretrained weights: ' + str(res.missing_keys)
+            assert set(res.unexpected_keys) == set(), \
+                'issue loading pretrained weights: ' + str(res.unexpected_keys)
     print('Loaded pretrained weights for {}'.format(model_name))
