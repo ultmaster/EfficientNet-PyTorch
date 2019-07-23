@@ -177,7 +177,10 @@ def main_worker(gpu, args):
                                      std=[0.229, 0.224, 0.225])
 
     if 'efficientnet' in args.arch:
-        image_size = EfficientNet.get_image_size(args.arch)
+        if args.request_from_nni:
+            image_size = args.resolution
+        else:
+            image_size = EfficientNet.get_image_size(args.arch)
         train_transforms = transforms.Compose([
             transforms.RandomResizedCrop(image_size),
             transforms.RandomHorizontalFlip(),

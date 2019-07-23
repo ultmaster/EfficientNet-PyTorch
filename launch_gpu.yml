@@ -14,5 +14,5 @@ tuner:
     product: 2
 trial:
   codeDir: .
-  command: python main.py cifar10 -a efficientnet-b0 --num-classes 10 --batch-size 32 --lr 0.032 --wd 1e-5 --request-from-nni
+  command: python main.py cifar10 -a efficientnet --num-classes 10 --batch-size 32 --lr 0.032 --wd 1e-5 --request-from-nni
   gpuNum: 1
