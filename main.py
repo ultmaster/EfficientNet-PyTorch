@@ -251,7 +251,7 @@ def main_worker(gpu, args):
 
         if args.request_from_nni:
             import nni
-            nni.report_intermediate_result(acc1)
+            nni.report_intermediate_result(acc1.cpu().item())
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -268,7 +268,7 @@ def main_worker(gpu, args):
     try:
         if args.request_from_nni:
             import nni
-            nni.report_final_result(acc1)
+            nni.report_final_result(acc1.cpu().item())
     except NameError:
         print("No accuracy reported")
         pass
