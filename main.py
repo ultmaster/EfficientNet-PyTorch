@@ -8,7 +8,10 @@ import os
 import random
 import time
 import warnings
+from multiprocessing.reduction import ForkingPickler
+
 import PIL
+import sys
 
 import torch
 import torch.nn as nn
@@ -16,6 +19,7 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
+from torch.utils.data import dataloader
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
@@ -66,6 +70,25 @@ parser.add_argument('--width-coefficient', default=None, type=float)
 parser.add_argument('--resolution', default=224, type=int)
 
 best_acc1 = 0
+
+
+def shared_memory_patch():
+    # https://github.com/huaweicloud/dls-example/issues/26
+    default_collate_func = dataloader.default_collate
+
+    def default_collate_override(batch):
+        dataloader._use_shared_memory = False
+        return default_collate_func(batch)
+
+    setattr(dataloader, 'default_collate', default_collate_override)
+
+    for t in torch._storage_classes:
+        if sys.version_info[0] == 2:
+            if t in ForkingPickler.dispatch:
+                del ForkingPickler.dispatch[t]
+        else:
+            if t in ForkingPickler._extra_reducers:
+                del ForkingPickler._extra_reducers[t]
 
 
 def main():
