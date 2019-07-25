@@ -64,6 +64,7 @@ parser.add_argument('--model-dir', default='/tmp', type=str)
 parser.add_argument('--depth-coefficient', default=None, type=float)
 parser.add_argument('--width-coefficient', default=None, type=float)
 parser.add_argument('--resolution', default=224, type=int)
+parser.add_argument('--optimizer', default='rmsprop', type=str)
 
 best_acc1 = 0
 
@@ -82,6 +83,8 @@ def main():
             args.resolution = int(tuner_params["gamma"] * 224)
         if "lr" in tuner_params:
             args.lr = tuner_params["lr"]
+        if "wd" in tuner_params:
+            args.wd = tuner_params["wd"]
 
         print(args)
 
@@ -152,9 +155,17 @@ def main_worker(gpu, args):
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
 
-    optimizer = torch.optim.RMSprop(model.parameters(), args.lr,
+    if args.optimizer == "rmsprop":
+        optimizer = torch.optim.RMSprop(model.parameters(), args.lr,
+                                        momentum=args.momentum,
+                                        weight_decay=args.weight_decay)
+    elif args.optimizer == "sgd":
+        optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                     momentum=args.momentum,
-                                    weight_decay=args.weight_decay)
+                                    weight_decay=args.weight_decay,
+                                    nesterov=True)
+    else:
+        raise NotImplementedError("Your requested optimizer '%s' is not found" % args.optimizer)
 
     # optionally resume from a checkpoint
     if args.resume:
