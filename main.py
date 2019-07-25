@@ -72,6 +72,7 @@ best_acc1 = 0
 head = '%(asctime)-15s %(message)s'
 logging.basicConfig(format=head)
 logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 
 def main():
