@@ -4,6 +4,7 @@ that being said, evaluation is working.
 """
 
 import argparse
+import logging
 import os
 import random
 import time
@@ -68,6 +69,10 @@ parser.add_argument('--optimizer', default='rmsprop', type=str)
 
 best_acc1 = 0
 
+head = '%(asctime)-15s %(message)s'
+logging.basicConfig(format=head)
+logger = logging.getLogger()
+
 
 def main():
     args = parser.parse_args()
@@ -75,7 +80,7 @@ def main():
     if args.request_from_nni:
         import nni
         tuner_params = nni.get_next_parameter()
-        print(tuner_params)
+        logger.info(str(tuner_params))
 
         if "alpha" in tuner_params:
             args.depth_coefficient = tuner_params["alpha"]
@@ -86,7 +91,7 @@ def main():
         if "wd" in tuner_params:
             args.wd = tuner_params["wd"]
 
-        print(args)
+        logger.info(str(args))
 
         # demonstrate that intermediate result is actually sent
         nni.report_intermediate_result(0.)
@@ -116,29 +121,29 @@ def main_worker(gpu, args):
     args.gpu = gpu
 
     if args.gpu is not None:
-        print("Use GPU: {} for training".format(args.gpu))
+        logger.info("Use GPU: {} for training".format(args.gpu))
 
     # create model
     if 'efficientnet' in args.arch:  # NEW
         if args.pretrained:
             model = EfficientNet.from_pretrained(args.arch, num_classes=args.num_classes)
-            print("=> using pre-trained model '{}'".format(args.arch))
+            logger.info("=> using pre-trained model '{}'".format(args.arch))
         elif args.request_from_nni:
             block_args, global_params = utils.efficientnet(width_coefficient=args.width_coefficient,
                                                            depth_coefficient=args.depth_coefficient,
                                                            image_size=args.resolution,
                                                            num_classes=args.num_classes)
             model = EfficientNet(block_args, global_params)
-            print("=> Creating EfficientNet with configurations from NNI")
+            logger.info("=> Creating EfficientNet with configurations from NNI")
         else:
-            print("=> creating model '{}'".format(args.arch))
+            logger.info("=> creating model '{}'".format(args.arch))
             model = EfficientNet.from_name(args.arch)
     else:
         if args.pretrained:
-            print("=> using pre-trained model '{}'".format(args.arch))
+            logger.info("=> using pre-trained model '{}'".format(args.arch))
             model = models.__dict__[args.arch](pretrained=True)
         else:
-            print("=> creating model '{}'".format(args.arch))
+            logger.info("=> creating model '{}'".format(args.arch))
             model = models.__dict__[args.arch]()
 
     if args.gpu is not None:
@@ -170,7 +175,7 @@ def main_worker(gpu, args):
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
+            logger.info("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
             best_acc1 = checkpoint['best_acc1']
@@ -179,10 +184,10 @@ def main_worker(gpu, args):
                 best_acc1 = best_acc1.to(args.gpu)
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
+            logger.info("=> loaded checkpoint '{}' (epoch {})"
+                        .format(args.resume, checkpoint['epoch']))
         else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
+            logger.info("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True
 
@@ -207,7 +212,7 @@ def main_worker(gpu, args):
             transforms.ToTensor(),
             normalize,
         ])
-        print('Using image size', image_size)
+        logger.info('Using image size %d' % image_size)
     else:
         train_transforms = transforms.Compose([
             transforms.RandomResizedCrop(224),
@@ -221,7 +226,7 @@ def main_worker(gpu, args):
             transforms.ToTensor(),
             normalize,
         ])
-        print('Using image size', 224)
+        logger.info('Using image size %d' % 224)
 
     # Data loading code
     if args.data == "cifar10":
@@ -233,7 +238,7 @@ def main_worker(gpu, args):
         train_dataset = datasets.CIFAR100(cifar100_dir, train=True, transform=train_transforms, download=True)
         val_dataset = datasets.CIFAR100(cifar100_dir, train=False, transform=val_transforms, download=True)
     else:
-        print("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
+        logger.info("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
         traindir = os.path.join(args.data, 'train')
         valdir = os.path.join(args.data, 'val')
         train_dataset = datasets.ImageFolder(traindir, train_transforms)
@@ -282,8 +287,9 @@ def main_worker(gpu, args):
         if args.request_from_nni:
             import nni
             nni.report_final_result(acc1.cpu().item())
+            logger.info("Reported intermediate results to nni successfully")
     except NameError:
-        print("No accuracy reported")
+        logger.info("No accuracy reported")
         pass
 
 
@@ -298,6 +304,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
     # switch to train mode
     model.train()
+    logger.info("Epoch %d starts" % epoch)
 
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
@@ -341,6 +348,7 @@ def validate(val_loader, model, criterion, args):
 
     # switch to evaluate mode
     model.eval()
+    logger.info("Evaluation starts")
 
     with torch.no_grad():
         end = time.time()
@@ -366,12 +374,13 @@ def validate(val_loader, model, criterion, args):
             if i % args.print_freq == 0:
                 progress.print(i)
 
-        # TODO: this should also be done with the ProgressMeter
-        print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
+        logger.info(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
+                    .format(top1=top1, top5=top5))
 
     return top1.avg
 
 
 if __name__ == '__main__':
+    logger.info("Process launched")
     main()
+    logger.info("Process succesfully terminated")
