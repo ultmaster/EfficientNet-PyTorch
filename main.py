@@ -23,6 +23,8 @@ import torchvision.models as models
 
 from efficientnet_pytorch import EfficientNet, utils
 from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy
+from utils.cross_entropy import LabelSmoothingLoss
+from utils.moving_average_decay import EMA
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
@@ -66,6 +68,10 @@ parser.add_argument('--depth-coefficient', default=None, type=float)
 parser.add_argument('--width-coefficient', default=None, type=float)
 parser.add_argument('--resolution', default=224, type=int)
 parser.add_argument('--optimizer', default='rmsprop', type=str)
+parser.add_argument('--cropped-center', default=0.875, type=float)
+parser.add_argument('--dont-adjust-learning-rate', default=False, action='store_true')
+parser.add_argument('--label-smoothing', default=0.1, type=float)
+parser.add_argument('--moving-average-decay', default=0.9999, type=float)
 
 best_acc1 = 0
 
@@ -91,6 +97,14 @@ def main():
             args.lr = tuner_params["lr"]
         if "wd" in tuner_params:
             args.wd = tuner_params["wd"]
+        if "cropped_center" in tuner_params:
+            args.cropped_center = tuner_params["cropped_center"]
+        if "dont_adjust_learning_rate" in tuner_params:
+            args.dont_adjust_learning_rate = tuner_params["dont_adjust_learning_rate"]
+        if "label_smoothing" in tuner_params:
+            args.label_smoothing = tuner_params["label_smoothing"]
+        if "moving_average_decay" in tuner_params:
+            args.moving_average_decay = tuner_params["moving_average_decay"]
 
         logger.info(str(args))
 
@@ -159,7 +173,20 @@ def main_worker(gpu, args):
             model = torch.nn.DataParallel(model).cuda()
 
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().cuda(args.gpu)
+    if args.label_smoothing:
+        logger.info("Using label smoothing = %.6f" % args.label_smoothing)
+        criterion = LabelSmoothingLoss(args.label_smoothing, args.num_classes).cuda(args.gpu)
+    else:
+        criterion = nn.CrossEntropyLoss().cuda(args.gpu)
+
+    if args.moving_average_decay:
+        logger.info("Using moving average decay = %.6f" % args.moving_average_decay)
+        ema = EMA(args.moving_average_decay)
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                ema.register(name, param.data)
+    else:
+        ema = None
 
     if args.optimizer == "rmsprop":
         optimizer = torch.optim.RMSprop(model.parameters(), args.lr,
@@ -208,7 +235,7 @@ def main_worker(gpu, args):
             normalize,
         ])
         val_transforms = transforms.Compose([
-            transforms.Resize(image_size, interpolation=PIL.Image.BICUBIC),
+            transforms.Resize(int(image_size / args.cropped_center), interpolation=PIL.Image.BICUBIC),
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
             normalize,
@@ -222,7 +249,7 @@ def main_worker(gpu, args):
             normalize,
         ])
         val_transforms = transforms.Compose([
-            transforms.Resize(256),
+            transforms.Resize(int(224 / args.cropped_center)),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
@@ -260,10 +287,11 @@ def main_worker(gpu, args):
         return
 
     for epoch in range(args.start_epoch, args.epochs):
-        adjust_learning_rate(optimizer, epoch, args)
+        if not args.dont_adjust_learning_rate:
+            adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        train(train_loader, model, criterion, optimizer, ema, epoch, args)
 
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
@@ -294,7 +322,7 @@ def main_worker(gpu, args):
         pass
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args):
+def train(train_loader, model, criterion, optimizer, ema, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -330,6 +358,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        if ema is not None:
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    param.data = ema(name, param.data)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
