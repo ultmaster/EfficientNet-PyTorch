@@ -22,9 +22,8 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 from efficientnet_pytorch import EfficientNet, utils
-from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy
-from utils.cross_entropy import LabelSmoothingLoss
-from utils.moving_average_decay import EMA
+from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy, \
+    LabelSmoothingLoss, EMA
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
