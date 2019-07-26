@@ -93,7 +93,8 @@ class LabelSmoothingLoss(nn.Module):
 
         smoothing_value = label_smoothing / (tgt_vocab_size - 2)
         one_hot = torch.full((tgt_vocab_size,), smoothing_value)
-        one_hot[self.ignore_index] = 0
+        if self.ignore_index >= 0:
+            one_hot[self.ignore_index] = 0
         self.register_buffer('one_hot', one_hot.unsqueeze(0))
 
         self.log_softmax = nn.LogSoftmax()
