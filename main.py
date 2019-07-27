@@ -266,10 +266,8 @@ def main_worker(gpu, args):
         val_dataset = datasets.CIFAR100(cifar100_dir, train=False, transform=val_transforms, download=True)
     else:
         logger.info("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
-        traindir = os.path.join(args.data, 'train')
-        valdir = os.path.join(args.data, 'val')
-        train_dataset = datasets.ImageFolder(traindir, train_transforms)
-        val_dataset = datasets.ImageFolder(valdir, val_transforms)
+        train_dataset = datasets.ImageNet(args.data, split="train", transform=train_transforms)
+        val_dataset = datasets.ImageNet(args.data, split="test", transform=val_transforms)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
