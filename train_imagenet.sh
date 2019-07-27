@@ -1,3 +1,4 @@
+set -x
 apt update
 apt install wget
 pip install hdfs
