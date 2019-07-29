@@ -267,7 +267,7 @@ def main_worker(gpu, args):
     else:
         logger.info("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
         train_dataset = datasets.ImageNet(args.data, split="train", download=True, transform=train_transforms)
-        val_dataset = datasets.ImageNet(args.data, split="test", download=True, transform=val_transforms)
+        val_dataset = datasets.ImageNet(args.data, split="val", download=True, transform=val_transforms)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
