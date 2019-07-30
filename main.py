@@ -20,6 +20,7 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
+from tensorboardX import SummaryWriter
 
 from efficientnet_pytorch import EfficientNet, utils
 from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy, \
@@ -277,8 +278,10 @@ def main_worker(gpu, args):
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
+    writer = SummaryWriter(os.path.join(args.model_dir, "summary"))
+
     if args.evaluate:
-        res = validate(val_loader, model, criterion, args)
+        res = validate(val_loader, writer, model, criterion, 0, args)
         with open('res.txt', 'w') as f:
             print(res, file=f)
         return
@@ -288,10 +291,10 @@ def main_worker(gpu, args):
             adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, ema, epoch, args)
+        train(train_loader, writer, model, criterion, optimizer, ema, epoch, args)
 
         # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, args)
+        acc1 = validate(val_loader, writer, model, criterion, epoch, args)
 
         if args.request_from_nni:
             import nni
@@ -309,6 +312,8 @@ def main_worker(gpu, args):
             'optimizer': optimizer.state_dict(),
         }, is_best, filename=os.path.join(args.model_dir, "checkpoint.pth.tar"))
 
+    writer.close()
+
     try:
         if args.request_from_nni:
             import nni
@@ -319,7 +324,7 @@ def main_worker(gpu, args):
         pass
 
 
-def train(train_loader, model, criterion, optimizer, ema, epoch, args):
+def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -365,10 +370,14 @@ def train(train_loader, model, criterion, optimizer, ema, epoch, args):
         end = time.time()
 
         if i % args.print_freq == 0:
+            current_step = len(train_loader) * epoch + i
             progress.print(i)
+            writer.add_scalar("train/loss", losses.val.cpu().item(), current_step)
+            writer.add_scalar("train/acc_1", top1.val.cpu().item(), current_step)
+            writer.add_scalar("train/acc_5", top5.val.cpu().item(), current_step)
 
 
-def validate(val_loader, model, criterion, args):
+def validate(val_loader, writer, model, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
@@ -402,7 +411,11 @@ def validate(val_loader, model, criterion, args):
             end = time.time()
 
             if i % args.print_freq == 0:
+                current_step = epoch * len(val_loader) + i
                 progress.print(i)
+                writer.add_scalar("train/loss", losses.val.cpu().item(), current_step)
+                writer.add_scalar("train/acc_1", top1.val.cpu().item(), current_step)
+                writer.add_scalar("train/acc_5", top5.val.cpu().item(), current_step)
 
         logger.info(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
                     .format(top1=top1, top5=top5))
