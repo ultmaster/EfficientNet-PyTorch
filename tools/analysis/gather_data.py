@@ -1,23 +1,26 @@
 import json
 import os
 import re
+import torch
 from argparse import ArgumentParser
 from datetime import timedelta, datetime
 
 from dateutil import parser as dateutil_parser
 import xlsxwriter
+from tensorboardX import SummaryWriter
 
 
-def analyze_metrics(root_dir, workbook):
-    date_format = workbook.add_format({"num_format": "hh:mm:ss"})
+def analyze_metrics(root_dir):
     categories = ["task_block_in_byte", "task_block_out_byte", "task_cpu_percent",
                   "task_gpu_mem_percent", "task_gpu_percent", "task_mem_usage_byte",
                   "task_net_in_byte", "task_net_out_byte"]
-    for category in categories:
-        worksheet = workbook.add_worksheet(category)
-        for i, trial_dir in enumerate(os.listdir(os.path.join(root_dir, "pai")), start=1):
-            worksheet.write(0, i, trial_dir)
-            trial_dir = os.path.join(root_dir, "pai", trial_dir)
+
+    for trial_dir in os.listdir(os.path.join(root_dir, "pai")):
+        summary_dir = os.path.join(root_dir, "summary", trial_dir)
+        os.makedirs(summary_dir, exist_ok=True)
+        writer = SummaryWriter(summary_dir)
+        trial_dir = os.path.join(root_dir, "pai", trial_dir)
+        for category in categories:
             with open(os.path.join(trial_dir, category + ".json"), "r") as fp:
                 data = json.load(fp)
             data = data["data"]["result"][0]["values"]
@@ -25,8 +28,8 @@ def analyze_metrics(root_dir, workbook):
                 continue
             start_time = data[0][0]
             for j, (time, val) in enumerate(data, start=1):
-                worksheet.write_datetime(j, 0, timedelta(seconds=time - start_time), date_format)
-                worksheet.write_number(j, i, float(val))
+                writer.add_scalar(category, float(val), time - start_time)
+        writer.close()
 
 
 def average(iterable):
@@ -247,9 +250,9 @@ class TrainingLogAnalyzer(object):
 
 def main(root_dir):
     workbook = xlsxwriter.Workbook(os.path.join(root_dir, 'result.xlsx'))
-    analyze_metrics(root_dir, workbook)
-    metrics_analyzer = TrainingLogAnalyzer()
-    metrics_analyzer.analyze_training_logs(root_dir, workbook)
+    analyze_metrics(root_dir)
+    # metrics_analyzer = TrainingLogAnalyzer()
+    # metrics_analyzer.analyze_training_logs(root_dir, workbook)
     workbook.close()
 
 
