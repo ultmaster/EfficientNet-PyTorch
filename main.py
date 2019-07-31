@@ -75,7 +75,7 @@ parser.add_argument('--moving-average-decay', default=0.9999, type=float)
 
 best_acc1 = 0
 
-head = '%(asctime)-15s %(message)s'
+head = '[%(asctime)-15s] %(message)s'
 logging.basicConfig(format=head)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -298,7 +298,7 @@ def main_worker(gpu, args):
 
         if args.request_from_nni:
             import nni
-            nni.report_intermediate_result(acc1.cpu().item())
+            nni.report_intermediate_result(acc1)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -317,7 +317,7 @@ def main_worker(gpu, args):
     try:
         if args.request_from_nni:
             import nni
-            nni.report_final_result(acc1.cpu().item())
+            nni.report_final_result(acc1)
             logger.info("Reported intermediate results to nni successfully")
     except NameError:
         logger.info("No accuracy reported")
@@ -372,9 +372,9 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
         if i % args.print_freq == 0:
             current_step = len(train_loader) * epoch + i
             progress.print(i)
-            writer.add_scalar("train/loss", losses.val.cpu().item(), current_step)
-            writer.add_scalar("train/acc_1", top1.val.cpu().item(), current_step)
-            writer.add_scalar("train/acc_5", top5.val.cpu().item(), current_step)
+            writer.add_scalar("train/loss", losses.val, current_step)
+            writer.add_scalar("train/acc_1", top1.val, current_step)
+            writer.add_scalar("train/acc_5", top5.val, current_step)
 
 
 def validate(val_loader, writer, model, criterion, epoch, args):
@@ -403,8 +403,8 @@ def validate(val_loader, writer, model, criterion, epoch, args):
             # measure accuracy and record loss
             acc1, acc5 = accuracy(output, target, topk=(1, 5))
             losses.update(loss.item(), images.size(0))
-            top1.update(acc1[0], images.size(0))
-            top5.update(acc5[0], images.size(0))
+            top1.update(acc1[0].item(), images.size(0))
+            top5.update(acc5[0].item(), images.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -413,9 +413,9 @@ def validate(val_loader, writer, model, criterion, epoch, args):
             if i % args.print_freq == 0:
                 current_step = epoch * len(val_loader) + i
                 progress.print(i)
-                writer.add_scalar("train/loss", losses.val.cpu().item(), current_step)
-                writer.add_scalar("train/acc_1", top1.val.cpu().item(), current_step)
-                writer.add_scalar("train/acc_5", top5.val.cpu().item(), current_step)
+                writer.add_scalar("train/loss", losses.val, current_step)
+                writer.add_scalar("train/acc_1", top1.val, current_step)
+                writer.add_scalar("train/acc_5", top5.val, current_step)
 
         logger.info(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
                     .format(top1=top1, top5=top5))
