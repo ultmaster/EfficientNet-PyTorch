@@ -97,7 +97,7 @@ class LabelSmoothingLoss(nn.Module):
             one_hot[self.ignore_index] = 0
         self.register_buffer('one_hot', one_hot.unsqueeze(0))
 
-        self.log_softmax = nn.LogSoftmax()
+        self.log_softmax = nn.LogSoftmax(dim=1)
         self.confidence = 1.0 - label_smoothing
 
     def forward(self, output, target):

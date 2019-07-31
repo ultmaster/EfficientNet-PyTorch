@@ -20,6 +20,7 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
+from tensorboardX import SummaryWriter
 
 from efficientnet_pytorch import EfficientNet, utils
 from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy, \
@@ -74,7 +75,7 @@ parser.add_argument('--moving-average-decay', default=0.9999, type=float)
 
 best_acc1 = 0
 
-head = '%(asctime)-15s %(message)s'
+head = '[%(asctime)-15s] %(message)s'
 logging.basicConfig(format=head)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -266,8 +267,8 @@ def main_worker(gpu, args):
         val_dataset = datasets.CIFAR100(cifar100_dir, train=False, transform=val_transforms, download=True)
     else:
         logger.info("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
-        train_dataset = datasets.ImageNet(args.data, split="train", download=True, transform=train_transforms)
-        val_dataset = datasets.ImageNet(args.data, split="val", download=True, transform=val_transforms)
+        train_dataset = datasets.ImageNet(args.data, split="train", download=False, transform=train_transforms)
+        val_dataset = datasets.ImageNet(args.data, split="val", download=False, transform=val_transforms)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -277,8 +278,10 @@ def main_worker(gpu, args):
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
+    writer = SummaryWriter(os.path.join(args.model_dir, "summary"))
+
     if args.evaluate:
-        res = validate(val_loader, model, criterion, args)
+        res = validate(val_loader, writer, model, criterion, 0, args)
         with open('res.txt', 'w') as f:
             print(res, file=f)
         return
@@ -288,14 +291,14 @@ def main_worker(gpu, args):
             adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, ema, epoch, args)
+        train(train_loader, writer, model, criterion, optimizer, ema, epoch, args)
 
         # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, args)
+        acc1 = validate(val_loader, writer, model, criterion, epoch, args)
 
         if args.request_from_nni:
             import nni
-            nni.report_intermediate_result(acc1.cpu().item())
+            nni.report_intermediate_result(acc1)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -309,17 +312,19 @@ def main_worker(gpu, args):
             'optimizer': optimizer.state_dict(),
         }, is_best, filename=os.path.join(args.model_dir, "checkpoint.pth.tar"))
 
+    writer.close()
+
     try:
         if args.request_from_nni:
             import nni
-            nni.report_final_result(acc1.cpu().item())
+            nni.report_final_result(acc1)
             logger.info("Reported intermediate results to nni successfully")
     except NameError:
         logger.info("No accuracy reported")
         pass
 
 
-def train(train_loader, model, criterion, optimizer, ema, epoch, args):
+def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -365,10 +370,14 @@ def train(train_loader, model, criterion, optimizer, ema, epoch, args):
         end = time.time()
 
         if i % args.print_freq == 0:
+            current_step = len(train_loader) * epoch + i
             progress.print(i)
+            writer.add_scalar("train/loss", losses.val, current_step)
+            writer.add_scalar("train/acc_1", top1.val, current_step)
+            writer.add_scalar("train/acc_5", top5.val, current_step)
 
 
-def validate(val_loader, model, criterion, args):
+def validate(val_loader, writer, model, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
@@ -394,15 +403,19 @@ def validate(val_loader, model, criterion, args):
             # measure accuracy and record loss
             acc1, acc5 = accuracy(output, target, topk=(1, 5))
             losses.update(loss.item(), images.size(0))
-            top1.update(acc1[0], images.size(0))
-            top5.update(acc5[0], images.size(0))
+            top1.update(acc1[0].item(), images.size(0))
+            top5.update(acc5[0].item(), images.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
             if i % args.print_freq == 0:
+                current_step = epoch * len(val_loader) + i
                 progress.print(i)
+                writer.add_scalar("train/loss", losses.val, current_step)
+                writer.add_scalar("train/acc_1", top1.val, current_step)
+                writer.add_scalar("train/acc_5", top5.val, current_step)
 
         logger.info(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
                     .format(top1=top1, top5=top5))
