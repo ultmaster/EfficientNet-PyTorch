@@ -1,10 +1,14 @@
-set -x
 apt update
-apt install wget
-pip install hdfs
-pip3 install -U torch torchvision
-touch ~/.hdfscli.cfg
-echo "[dev.alias]" > ~/.hdfscli.cfg
-echo "url = http://10.151.40.179:50070" >> ~/.hdfscli.cfg
-hdfscli download --alias=dev /v_yugzh/imagenet /root
-python3 main.py /root/imagenet -j 4 --epochs 20 -a efficientnet-b0 --pretrained --num-classes 1000 --batch-size 64 --optimizer rmsprop
+apt install --assume-yes nfs-common cifs-utils sshpass wget git
+umask 000
+declare -a MOUNTPOINTS=()
+mkdir --parents /mnt/data
+mount -t cifs //10.151.40.4/data/yugzh /mnt/data -o vers=3.0,username=paismbuser,password=paismbpwd,domain=WORKGROUP
+pip install tensorboardx tensorboard tensorflow
+pip install -U torch torchvision
+
+git clone https://github.com/ultmaster/EfficientNet-PyTorch
+cd EfficientNet-PyTorch
+
+(tensorboard --logdir /tmp/summary --port $PAI_PORT_LIST_main_0_tensorboard &)
+python3 main.py /mnt/data/imagenet -j 16 --epochs 20 -a efficientnet --num-classes 1000 --batch-size 64 --optimizer rmsprop --lr 0.064 --wd 1e-5
