@@ -11,4 +11,4 @@ git clone https://github.com/ultmaster/EfficientNet-PyTorch
 cd EfficientNet-PyTorch
 
 (tensorboard --logdir /tmp/summary --port $PAI_PORT_LIST_main_0_tensorboard &)
-python3 main.py /mnt/data/imagenet -j 16 --epochs 20 -a efficientnet --num-classes 1000 --batch-size 64 --optimizer rmsprop --lr 0.064 --wd 1e-5
+python3 main.py /mnt/data/imagenet -j 16 --epochs 20 -a efficientnet-b0 --num-classes 1000 --batch-size 64 --optimizer rmsprop --lr 0.064 --wd 1e-5
