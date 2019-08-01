@@ -160,6 +160,7 @@ class TimeLoggedImageNet(ImageNet):
         formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
+        self.logger.propagate = False
 
     def __getitem__(self, index):
         """
