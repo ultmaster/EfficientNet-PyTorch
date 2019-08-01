@@ -146,7 +146,7 @@ class TimingContext:
     def __enter__(self):
         self.cur_time = datetime.now()
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         duration = (datetime.now() - self.cur_time).total_seconds()
         self.logger.info("[%08d] %s\t%.6f seconds" % (self.index, self.annotation, duration))
 
