@@ -151,16 +151,20 @@ class TimingContext:
         self.logger.info("[%08d] %s\t%.6f seconds" % (self.index, self.annotation, duration))
 
 
+# call this once
+timing_logger = logging.getLogger("imagenet_load")
+timing_handler = logging.FileHandler("/tmp/effnet/imagenet_load.log")
+timing_formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+timing_handler.setFormatter(timing_formatter)
+timing_logger.addHandler(timing_handler)
+timing_logger.propagate = False
+
+
 class TimeLoggedImageNet(ImageNet):
 
     def __init__(self, root, split='train', download=False, **kwargs):
         super().__init__(root, split=split, download=download, **kwargs)
-        self.logger = logging.getLogger("data_load_timing")
-        handler = logging.FileHandler("/tmp/imagenet_load.log")
-        formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        self.logger.propagate = False
+        self.logger = logging.getLogger("imagenet_load")
 
     def __getitem__(self, index):
         """
