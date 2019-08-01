@@ -154,7 +154,7 @@ class TimingContext:
 # call this once
 timing_logger = logging.getLogger("imagenet_load")
 timing_handler = logging.FileHandler("/tmp/effnet/imagenet_load.log")
-timing_formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+timing_formatter = logging.Formatter("%(asctime)s %(name)s [%(process)d %(thread)d] %(levelname)s %(message)s")
 timing_handler.setFormatter(timing_formatter)
 timing_logger.addHandler(timing_handler)
 timing_logger.propagate = False
