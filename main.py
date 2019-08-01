@@ -29,6 +29,7 @@ from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
                     help='path to dataset (use cifar10, cifar100 to refer to built in datasets)')
+parser.add_argument("--download-dir", default="/tmp", help="where to download datasets like cifar10 or cifar100")
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     help='model architecture (default: resnet18)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
@@ -258,11 +259,11 @@ def main_worker(gpu, args):
 
     # Data loading code
     if args.data == "cifar10":
-        cifar10_dir = "/tmp/cifar10"
+        cifar10_dir = os.path.join(args.download_dir, "cifar10")
         train_dataset = datasets.CIFAR10(cifar10_dir, train=True, transform=train_transforms, download=True)
         val_dataset = datasets.CIFAR10(cifar10_dir, train=False, transform=val_transforms, download=True)
     elif args.data == "cifar100":
-        cifar100_dir = "/tmp/cifar100"
+        cifar100_dir = os.path.join(args.download_dir, "cifar100")
         train_dataset = datasets.CIFAR100(cifar100_dir, train=True, transform=train_transforms, download=True)
         val_dataset = datasets.CIFAR100(cifar100_dir, train=False, transform=val_transforms, download=True)
     else:
