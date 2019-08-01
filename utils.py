@@ -1,8 +1,13 @@
+import io
+import logging
 import shutil
+from datetime import datetime
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
+from torchvision.datasets import ImageNet
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -113,7 +118,7 @@ class LabelSmoothingLoss(nn.Module):
         return F.kl_div(output, model_prob, reduction='sum')
 
 
-class EMA():
+class EMA(object):
     """
     https://discuss.pytorch.org/t/how-to-apply-exponential-moving-average-decay-for-variables/10856
     """
@@ -130,3 +135,53 @@ class EMA():
         new_average = (1.0 - self.mu) * x + self.mu * self.shadow[name]
         self.shadow[name] = new_average.clone()
         return new_average
+
+
+class TimingContext:
+    def __init__(self, logger, index, annotation):
+        self.logger = logger
+        self.index = index
+        self.annotation = annotation
+
+    def __enter__(self):
+        self.cur_time = datetime.now()
+
+    def __exit__(self):
+        duration = (datetime.now() - self.cur_time).total_seconds()
+        self.logger.info("[%08d] %s\t%.6f seconds" % (self.index, self.annotation, duration))
+
+
+class TimeLoggedImageNet(ImageNet):
+
+    def __init__(self, root, split='train', download=False, **kwargs):
+        super().__init__(root, split=split, download=download, **kwargs)
+        self.logger = logging.getLogger("data_load_timing")
+        handler = logging.FileHandler("/tmp/imagenet_load.log")
+        formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (sample, target) where target is class_index of the target class.
+        """
+        path, target = self.samples[index]
+
+        with TimingContext(self.logger, index, "loading file from disk"):
+            with open(path, "rb") as f:
+                fbytes = f.read()
+        with TimingContext(self.logger, index, "decode image and convert"):
+            img = Image.open(io.BytesIO(fbytes))
+            sample = img.convert("RGB")
+
+        if self.transform is not None:
+            with TimingContext(self.logger, index, "image transform"):
+                sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return sample, target

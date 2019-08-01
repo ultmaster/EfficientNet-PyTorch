@@ -24,7 +24,7 @@ from tensorboardX import SummaryWriter
 
 from efficientnet_pytorch import EfficientNet, utils
 from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy, \
-    LabelSmoothingLoss, EMA
+    LabelSmoothingLoss, EMA, TimeLoggedImageNet
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
@@ -73,6 +73,7 @@ parser.add_argument('--cropped-center', default=0.875, type=float)
 parser.add_argument('--dont-adjust-learning-rate', default=False, action='store_true')
 parser.add_argument('--label-smoothing', default=0.1, type=float)
 parser.add_argument('--moving-average-decay', default=0.9999, type=float)
+parser.add_argument('--timing-data-loading', default=False, action='store_true')
 
 best_acc1 = 0
 
@@ -268,8 +269,11 @@ def main_worker(gpu, args):
         val_dataset = datasets.CIFAR100(cifar100_dir, train=False, transform=val_transforms, download=True)
     else:
         logger.info("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
-        train_dataset = datasets.ImageNet(args.data, split="train", download=False, transform=train_transforms)
-        val_dataset = datasets.ImageNet(args.data, split="val", download=False, transform=val_transforms)
+        dataset_class = datasets.ImageNet
+        if args.timing_data_loading:
+            dataset_class = TimeLoggedImageNet
+        train_dataset = dataset_class(args.data, split="train", download=False, transform=train_transforms)
+        val_dataset = dataset_class(args.data, split="val", download=False, transform=val_transforms)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
