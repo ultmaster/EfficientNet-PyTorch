@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 from torchvision.datasets import ImageNet
+from torchvision.datasets.folder import pil_loader
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -176,12 +177,8 @@ class TimeLoggedImageNet(ImageNet):
         """
         path, target = self.samples[index]
 
-        with TimingContext(self.logger, index, "loading file from disk"):
-            with open(path, "rb") as f:
-                fbytes = f.read()
-        with TimingContext(self.logger, index, "decode image and convert"):
-            img = Image.open(io.BytesIO(fbytes))
-            sample = img.convert("RGB")
+        with TimingContext(self.logger, index, "loading file from disk and convert"):
+            sample = pil_loader(path)
 
         if self.transform is not None:
             with TimingContext(self.logger, index, "image transform"):
