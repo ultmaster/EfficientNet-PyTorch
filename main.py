@@ -34,6 +34,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     help='model architecture (default: resnet18)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
+parser.add_argument('--max-steps', default=None, type=int, help='maximum number of steps to run')
 parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
@@ -380,6 +381,9 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
             writer.add_scalar("train/loss", losses.val, current_step)
             writer.add_scalar("train/acc_1", top1.val, current_step)
             writer.add_scalar("train/acc_5", top5.val, current_step)
+
+        if args.max_steps is not None and i > args.max_steps:
+            break
 
 
 def validate(val_loader, writer, model, criterion, epoch, args):
