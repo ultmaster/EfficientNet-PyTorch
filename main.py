@@ -297,7 +297,8 @@ def main_worker(gpu, args):
             adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, writer, model, criterion, optimizer, ema, epoch, args)
+        if not train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
+            break
 
         # evaluate on validation set
         acc1 = validate(val_loader, writer, model, criterion, epoch, args)
@@ -375,15 +376,18 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
         batch_time.update(time.time() - end)
         end = time.time()
 
+        current_step = len(train_loader) * epoch + i
+
         if i % args.print_freq == 0:
-            current_step = len(train_loader) * epoch + i
             progress.print(i)
             writer.add_scalar("train/loss", losses.val, current_step)
             writer.add_scalar("train/acc_1", top1.val, current_step)
             writer.add_scalar("train/acc_5", top5.val, current_step)
 
-        if args.max_steps is not None and i > args.max_steps:
-            break
+        if args.max_steps is not None and current_step > args.max_steps:
+            return False
+
+    return True
 
 
 def validate(val_loader, writer, model, criterion, epoch, args):
