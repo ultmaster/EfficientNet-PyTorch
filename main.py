@@ -426,9 +426,9 @@ def validate(val_loader, writer, model, criterion, epoch, args):
             if i % args.print_freq == 0:
                 current_step = epoch * len(val_loader) + i
                 progress.print(i)
-                writer.add_scalar("train/loss", losses.val, current_step)
-                writer.add_scalar("train/acc_1", top1.val, current_step)
-                writer.add_scalar("train/acc_5", top5.val, current_step)
+                writer.add_scalar("val/loss", losses.val, current_step)
+                writer.add_scalar("val/acc_1", top1.val, current_step)
+                writer.add_scalar("val/acc_5", top5.val, current_step)
 
         logger.info(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
                     .format(top1=top1, top5=top5))
