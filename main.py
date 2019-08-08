@@ -74,7 +74,6 @@ parser.add_argument('--cropped-center', default=0.875, type=float)
 parser.add_argument('--dont-adjust-learning-rate', default=False, action='store_true')
 parser.add_argument('--label-smoothing', default=0.1, type=float)
 parser.add_argument('--moving-average-decay', default=0.9999, type=float)
-parser.add_argument('--timing-data-loading', default=False, action='store_true')
 
 best_acc1 = 0
 
@@ -271,8 +270,6 @@ def main_worker(gpu, args):
     else:
         logger.info("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
         dataset_class = datasets.ImageNet
-        if args.timing_data_loading:
-            dataset_class = TimeLoggedImageNet
         train_dataset = dataset_class(args.data, split="train", download=False, transform=train_transforms)
         val_dataset = dataset_class(args.data, split="val", download=False, transform=val_transforms)
 

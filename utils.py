@@ -1,14 +1,9 @@
-import io
-import logging
 import shutil
 from datetime import datetime
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from PIL import Image
-from torchvision.datasets import ImageNet
-from torchvision.datasets.folder import pil_loader
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -150,40 +145,3 @@ class TimingContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = (datetime.now() - self.cur_time).total_seconds()
         self.logger.info("[%08d] %s\t%.6f seconds" % (self.index, self.annotation, duration))
-
-
-# call this once
-timing_logger = logging.getLogger("imagenet_load")
-timing_handler = logging.FileHandler("/tmp/effnet/imagenet_load.log")
-timing_formatter = logging.Formatter("%(asctime)s %(name)s [%(process)d %(thread)d] %(levelname)s %(message)s")
-timing_handler.setFormatter(timing_formatter)
-timing_logger.addHandler(timing_handler)
-timing_logger.propagate = False
-
-
-class TimeLoggedImageNet(ImageNet):
-
-    def __init__(self, root, split='train', download=False, **kwargs):
-        super().__init__(root, split=split, download=download, **kwargs)
-        self.logger = logging.getLogger("imagenet_load")
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (sample, target) where target is class_index of the target class.
-        """
-        path, target = self.samples[index]
-
-        with TimingContext(self.logger, index, "loading file from disk and convert"):
-            sample = pil_loader(path)
-
-        if self.transform is not None:
-            with TimingContext(self.logger, index, "image transform"):
-                sample = self.transform(sample)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return sample, target
