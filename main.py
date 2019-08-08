@@ -332,13 +332,15 @@ def main_worker(gpu, args):
 
 
 def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
+    forward_time = AverageMeter('Forward', ':6.3f')
+    criterion_time = AverageMeter('Criterion', ':6.3f')
+    backward_time = AverageMeter('Backward', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(logger, len(train_loader), batch_time, data_time, losses, top1,
-                             top5, prefix="Epoch: [{}]".format(epoch))
+    progress = ProgressMeter(logger, len(train_loader), data_time, forward_time, criterion_time, backward_time, losses,
+                             top1, top5, prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
     model.train()
@@ -348,6 +350,7 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
+        end = time.time()
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
@@ -355,6 +358,11 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
 
         # compute output
         output = model(images)
+
+        # measure forward time
+        forward_time.update(time.time() - end)
+        end = time.time()
+
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -362,6 +370,10 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
+
+        # measure criterion time
+        criterion_time.update(time.time() - end)
+        end = time.time()
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -373,7 +385,7 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
                     param.data = ema(name, param.data)
 
         # measure elapsed time
-        batch_time.update(time.time() - end)
+        backward_time.update(time.time() - end)
         end = time.time()
 
         current_step = len(train_loader) * epoch + i
@@ -391,11 +403,12 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
 
 
 def validate(val_loader, writer, model, criterion, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
+    data_time = AverageMeter('Data', ':6.3f')
+    batch_time = AverageMeter('Batch', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(logger, len(val_loader), batch_time, losses, top1, top5,
+    progress = ProgressMeter(logger, len(val_loader), data_time, batch_time, losses, top1, top5,
                              prefix='Test: ')
 
     # switch to evaluate mode
@@ -405,6 +418,10 @@ def validate(val_loader, writer, model, criterion, epoch, args):
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
+            # measure data loading time
+            data_time.update(time.time() - end)
+            end = time.time()
+
             if args.gpu is not None:
                 images = images.cuda(args.gpu, non_blocking=True)
             target = target.cuda(args.gpu, non_blocking=True)
