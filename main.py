@@ -24,7 +24,7 @@ from tensorboardX import SummaryWriter
 
 from efficientnet_pytorch import EfficientNet, utils
 from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_rate, accuracy, \
-    LabelSmoothingLoss, EMA, TimeLoggedImageNet
+    LabelSmoothingLoss, EMA
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
