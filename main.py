@@ -29,10 +29,12 @@ from utils import save_checkpoint, AverageMeter, ProgressMeter, adjust_learning_
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
                     help='path to dataset (use cifar10, cifar100 to refer to built in datasets)')
+parser.add_argument("--download-dir", default="/tmp", help="where to download datasets like cifar10 or cifar100")
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     help='model architecture (default: resnet18)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
+parser.add_argument('--max-steps', default=None, type=int, help='maximum number of steps to run')
 parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
@@ -258,17 +260,18 @@ def main_worker(gpu, args):
 
     # Data loading code
     if args.data == "cifar10":
-        cifar10_dir = "/tmp/cifar10"
+        cifar10_dir = os.path.join(args.download_dir, "cifar10")
         train_dataset = datasets.CIFAR10(cifar10_dir, train=True, transform=train_transforms, download=True)
         val_dataset = datasets.CIFAR10(cifar10_dir, train=False, transform=val_transforms, download=True)
     elif args.data == "cifar100":
-        cifar100_dir = "/tmp/cifar100"
+        cifar100_dir = os.path.join(args.download_dir, "cifar100")
         train_dataset = datasets.CIFAR100(cifar100_dir, train=True, transform=train_transforms, download=True)
         val_dataset = datasets.CIFAR100(cifar100_dir, train=False, transform=val_transforms, download=True)
     else:
         logger.info("Dealing with ImageNet here at %s" % os.path.abspath(args.data))
-        train_dataset = datasets.ImageNet(args.data, split="train", download=False, transform=train_transforms)
-        val_dataset = datasets.ImageNet(args.data, split="val", download=False, transform=val_transforms)
+        dataset_class = datasets.ImageNet
+        train_dataset = dataset_class(args.data, split="train", download=False, transform=train_transforms)
+        val_dataset = dataset_class(args.data, split="val", download=False, transform=val_transforms)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -291,7 +294,8 @@ def main_worker(gpu, args):
             adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, writer, model, criterion, optimizer, ema, epoch, args)
+        if not train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
+            break
 
         # evaluate on validation set
         acc1 = validate(val_loader, writer, model, criterion, epoch, args)
@@ -325,13 +329,15 @@ def main_worker(gpu, args):
 
 
 def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
+    forward_time = AverageMeter('Forward', ':6.3f')
+    criterion_time = AverageMeter('Criterion', ':6.3f')
+    backward_time = AverageMeter('Backward', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(logger, len(train_loader), batch_time, data_time, losses, top1,
-                             top5, prefix="Epoch: [{}]".format(epoch))
+    progress = ProgressMeter(logger, len(train_loader), data_time, forward_time, criterion_time, backward_time, losses,
+                             top1, top5, prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
     model.train()
@@ -341,6 +347,7 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
+        end = time.time()
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
@@ -348,6 +355,11 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
 
         # compute output
         output = model(images)
+
+        # measure forward time
+        forward_time.update(time.time() - end)
+        end = time.time()
+
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -355,6 +367,10 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
+
+        # measure criterion time
+        criterion_time.update(time.time() - end)
+        end = time.time()
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -366,23 +382,30 @@ def train(train_loader, writer, model, criterion, optimizer, ema, epoch, args):
                     param.data = ema(name, param.data)
 
         # measure elapsed time
-        batch_time.update(time.time() - end)
+        backward_time.update(time.time() - end)
         end = time.time()
 
+        current_step = len(train_loader) * epoch + i
+
         if i % args.print_freq == 0:
-            current_step = len(train_loader) * epoch + i
             progress.print(i)
             writer.add_scalar("train/loss", losses.val, current_step)
             writer.add_scalar("train/acc_1", top1.val, current_step)
             writer.add_scalar("train/acc_5", top5.val, current_step)
 
+        if args.max_steps is not None and current_step > args.max_steps:
+            return False
+
+    return True
+
 
 def validate(val_loader, writer, model, criterion, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
+    data_time = AverageMeter('Data', ':6.3f')
+    batch_time = AverageMeter('Batch', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(logger, len(val_loader), batch_time, losses, top1, top5,
+    progress = ProgressMeter(logger, len(val_loader), data_time, batch_time, losses, top1, top5,
                              prefix='Test: ')
 
     # switch to evaluate mode
@@ -392,6 +415,10 @@ def validate(val_loader, writer, model, criterion, epoch, args):
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
+            # measure data loading time
+            data_time.update(time.time() - end)
+            end = time.time()
+
             if args.gpu is not None:
                 images = images.cuda(args.gpu, non_blocking=True)
             target = target.cuda(args.gpu, non_blocking=True)
@@ -413,9 +440,9 @@ def validate(val_loader, writer, model, criterion, epoch, args):
             if i % args.print_freq == 0:
                 current_step = epoch * len(val_loader) + i
                 progress.print(i)
-                writer.add_scalar("train/loss", losses.val, current_step)
-                writer.add_scalar("train/acc_1", top1.val, current_step)
-                writer.add_scalar("train/acc_5", top5.val, current_step)
+                writer.add_scalar("val/loss", losses.val, current_step)
+                writer.add_scalar("val/acc_1", top1.val, current_step)
+                writer.add_scalar("val/acc_5", top5.val, current_step)
 
         logger.info(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
                     .format(top1=top1, top5=top5))
