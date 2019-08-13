@@ -6,4 +6,5 @@ mount -t cifs //10.151.41.13/data/yugzh /mnt/data -o vers=3.0,username=paismbuse
 git clone https://github.com/ultmaster/EfficientNet-PyTorch
 cd EfficientNet-PyTorch
 mkdir /tmp/effnet
-python3 main.py /mnt/data/imagenet -j 1 -a efficientnet --batch-size 48 --lr 0.048 --wd 1e-5 --epochs 5 --request-from-nni
+nvidia-smi
+python3 main.py /mnt/data/imagenet -j 1 -a efficientnet --batch-size 32 --lr 0.032 --wd 1e-5 --epochs 5 --request-from-nni
