@@ -13,7 +13,7 @@ class FixedProductTuner(GridSearchTuner):
             ret_para = []
             for p in para:
                 prod = p["alpha"] * (p["beta"] ** 2) * (p["gamma"] ** 2)
-                if abs(prod - self.product) < 0.05:
+                if abs(prod - self.product) < 0.1:
                     ret_para.append(p)
             return ret_para
         return para
