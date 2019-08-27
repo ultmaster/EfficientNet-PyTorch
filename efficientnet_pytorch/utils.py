@@ -295,5 +295,10 @@ def load_pretrained_weights(model, model_name, load_fc=True):
         state_dict.pop('_fc.weight')
         state_dict.pop('_fc.bias')
         res = model.load_state_dict(state_dict, strict=False)
-        assert str(res.missing_keys) == str(['_fc.weight', '_fc.bias']), 'issue loading pretrained weights'
+        # to be compatible with 0.4
+        if res is not None:
+            assert set(res.missing_keys) == {'_fc.bias', '_fc.weight'}, \
+                'issue loading pretrained weights: ' + str(res.missing_keys)
+            assert set(res.unexpected_keys) == set(), \
+                'issue loading pretrained weights: ' + str(res.unexpected_keys)
     print('Loaded pretrained weights for {}'.format(model_name))
