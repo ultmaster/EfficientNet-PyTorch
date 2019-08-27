@@ -1,5 +1,4 @@
 import shutil
-from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -131,17 +130,3 @@ class EMA(object):
         new_average = (1.0 - self.mu) * x + self.mu * self.shadow[name]
         self.shadow[name] = new_average.clone()
         return new_average
-
-
-class TimingContext:
-    def __init__(self, logger, index, annotation):
-        self.logger = logger
-        self.index = index
-        self.annotation = annotation
-
-    def __enter__(self):
-        self.cur_time = datetime.now()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        duration = (datetime.now() - self.cur_time).total_seconds()
-        self.logger.info("[%08d] %s\t%.6f seconds" % (self.index, self.annotation, duration))
